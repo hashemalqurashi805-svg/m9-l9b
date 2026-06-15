@@ -14,32 +14,38 @@ def link(
     text: str,
     ner_spans: list[tuple[int, int, str, str]],
 ) -> list[LinkResult]:
-    """Orchestrate the linker pipeline for one document.
-
-    Args:
-      driver: an open neo4j.GraphDatabase driver.
-      doc_id: identifier of this document (propagated into every LinkResult).
-      text: the document text (currently unused inside the function; reserved
-        for future context features — keep the parameter in the signature
-        because the Integration repo calls link() with it).
-      ner_spans: a list of (start, end, surface, ner_label) tuples in
-        document order.
-
-    Returns: list[LinkResult], one per input span, in the same order.
-
-    Iterate in document order so that doc_resolved grows monotonically and
-    the co-occurrence signal builds up as the document is walked.
-    """
-    # TODO:
+    """Orchestrate the linker pipeline for one document."""
+    
     # 1. Initialize results = [] and doc_resolved = [].
+    results = []
+    doc_resolved = []
+    
     # 2. For each (start, end, surface, ner_label) in ner_spans (in order):
-    #      a. Call candidates(driver, surface).
-    #      b. Call disambiguate(driver, candidates_list, ner_label, doc_resolved).
-    #      c. Construct a LinkResult (predicted_node_id/predicted_type_label
-    #         from the chosen candidate dict, or None on NIL).
-    #      d. Append it to results AND to doc_resolved.
+    for start, end, surface, ner_label in ner_spans:
+        
+        # a. Call candidates(driver, surface).
+        cands = candidates(driver, surface)
+        
+        # b. Call disambiguate(driver, candidates_list, ner_label, doc_resolved).
+        chosen_cand, reason = disambiguate(driver, cands, ner_label, doc_resolved)
+        
+        # c. Construct a LinkResult (predicted_node_id/predicted_type_label from chosen candidate dict, or None on NIL).
+        predicted_node_id = chosen_cand["id"] if chosen_cand else None
+        predicted_type_label = chosen_cand["labels"][0] if chosen_cand and chosen_cand["labels"] else None
+        
+        result = LinkResult(
+            doc_id=doc_id,
+            start=start,
+            end=end,
+            surface=surface,
+            predicted_node_id=predicted_node_id,
+            predicted_type_label=predicted_type_label,
+            reason=reason
+        )
+        
+        # d. Append it to results AND to doc_resolved.
+        results.append(result)
+        doc_resolved.append(result)
+        
     # 3. Return results.
-    raise NotImplementedError(
-        "link() is not yet implemented — orchestrate candidates -> disambiguate "
-        "per the Lab guide."
-    )
+    return results

@@ -53,15 +53,22 @@ def merge_entity(label: str, name: str, extra_props: dict | None = None) -> tupl
     identifier list — do NOT pass property names as parameters, only
     property VALUES. The id MUST come through a parameter ($id).
     """
-    # TODO (Identity Mapping):
     # 1. Compute the canonical id via canonical_id(label, name).
-    # 2. Build the Cypher string with two labels (`:<label>:Entity`),
+    entity_id = canonical_id(label, name)
+    
+    # 2. Build the params dict including id, name, and every extra_props entry.
+    params = {"id": entity_id, "name": name}
+    if extra_props:
+        params.update(extra_props)
+    
+    # 3. Build the Cypher string with two labels (`:<label>:Entity`),
     #    the parameterized MERGE on `{id: $id}`, and a SET clause that
     #    assigns `n.name = $name` plus one `n.<key> = $<key>` clause per
     #    extra_props key.
-    # 3. Build the params dict including id, name, and every extra_props entry.
+    set_clauses = [f"n.{key} = ${key}" for key in params if key != "id"]
+    set_clause_str = ", ".join(set_clauses)
+    
+    cypher = f"MERGE (n:{label}:Entity {{id: $id}}) SET {set_clause_str}"
+    
     # 4. Return (cypher, params).
-    raise NotImplementedError(
-        "merge_entity is not yet implemented — see the Identity Discipline section "
-        "of the Reading and complete the TODO."
-    )
+    return cypher, params
