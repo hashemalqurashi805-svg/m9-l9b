@@ -1,37 +1,50 @@
 """Linker P/R/F1 scoring."""
 from linker.types import LinkResult, GoldSpan
 
-
 def score(predictions: list[LinkResult], gold: list[GoldSpan]) -> dict:
-    """Compute precision, recall, F1 over (node_id, type_label) tuples.
+    gold_map = {(g.doc_id, g.start, g.end): g for g in gold}
+    preds_map = {(p.doc_id, p.start, p.end): p for p in predictions}
+    
+    doc_metrics = {}
+    all_doc_ids = {g.doc_id for g in gold}
+    
+    for doc_id in all_doc_ids:
+        tp, fp, fn = 0, 0, 0
+        all_spans = {s for s in gold_map if s[0] == doc_id} | {s for s in preds_map if s[0] == doc_id}
+        
+        for span in all_spans:
+            g = gold_map.get(span)
+            p = preds_map.get(span)
+            
+            is_gold_nil = (g is None or g.gold_node_id is None)
+            is_pred_nil = (p is None or p.predicted_node_id is None)
+            
+            if not is_gold_nil and not is_pred_nil:
+                if p.predicted_node_id == g.gold_node_id and p.predicted_type_label == g.gold_type_label:
+                    tp += 1
+                else:
+                    fp += 1
+                    fn += 1
+            elif not is_gold_nil and is_pred_nil:
+                fn += 1
+            elif is_gold_nil and not is_pred_nil:
+                fp += 1
+                
+        doc_metrics[doc_id] = (tp, fp, fn)
 
-    Triple-stated methodology (verbatim in lab-spec.md, lab guide page, and
-    this docstring):
-
-    - Predictions are filtered to the gold span set (same doc_id, start, end)
-      before scoring; predictions on spans absent from gold are dropped.
-    - A span is a true positive iff the predicted (node_id, type_label)
-      EXACTLY matches gold AND gold is non-NIL.
-    - A prediction of a wrong (node_id, type_label) on a non-NIL gold is a
-      false positive AND a false negative on that span.
-    - A NIL prediction on a non-NIL gold is a false negative only.
-    - A non-NIL prediction on a NIL gold is a false positive only.
-    - A NIL prediction on a NIL gold is a true negative (not counted in
-      precision or recall).
-    - Aggregation is macro-average across documents (per-doc P/R/F1 averaged
-      with equal weight per doc; docs with no gold spans are skipped).
-
-    Returns {'precision': float, 'recall': float, 'f1': float}.
-    """
-    # TODO:
-    # 1. Build a gold-span index keyed by (doc_id, start, end) for fast lookup.
-    # 2. Filter predictions to the gold span set per the methodology.
-    # 3. For each doc_id in gold, accumulate TP / FP / FN per the rules above
-    #    (TN-NIL is informational only — not in P or R).
-    # 4. Compute per-doc P, R, F1 (with 0/0 convention: P=R=F1=0 when the
-    #    denominator is 0; skip docs with no gold spans entirely).
-    # 5. Macro-average the per-doc metrics; return the dict.
-    raise NotImplementedError(
-        "score() is not yet implemented — implement the triple-stated "
-        "methodology described in this docstring."
-    )
+    total_p, total_r, total_f1 = 0.0, 0.0, 0.0
+    count = len(doc_metrics)
+    
+    for tp, fp, fn in doc_metrics.values():
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+        total_p += precision
+        total_r += recall
+        total_f1 += f1
+        
+    return {
+        "precision": total_p / count if count else 0.0,
+        "recall": total_r / count if count else 0.0,
+        "f1": total_f1 / count if count else 0.0
+    }
